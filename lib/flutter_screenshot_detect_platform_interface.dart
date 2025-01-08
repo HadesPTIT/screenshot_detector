@@ -1,4 +1,3 @@
-// screenshot_detector/lib/screenshot_detector_platform_interface.dart
 import 'package:flutter_screenshot_detect/flutter_screenshot_detect_method_channel.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 

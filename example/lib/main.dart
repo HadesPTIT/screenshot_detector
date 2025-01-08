@@ -1,4 +1,3 @@
-// example/lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_screenshot_detect/flutter_screenshot_detect.dart';
 
@@ -11,14 +10,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       home: ScreenshotDetectDemo(),
     );
   }
 }
 
 class ScreenshotDetectDemo extends StatefulWidget {
+  const ScreenshotDetectDemo({super.key});
+
   @override
+  // ignore: library_private_types_in_public_api
   _ScreenshotDetectDemoState createState() => _ScreenshotDetectDemoState();
 }
 
@@ -30,6 +32,7 @@ class _ScreenshotDetectDemoState extends State<ScreenshotDetectDemo> {
   void initState() {
     super.initState();
     _detector.startListening((event) {
+      debugPrint('Screenshot Taken');
       setState(() {
         _events.insert(0, event);
       });

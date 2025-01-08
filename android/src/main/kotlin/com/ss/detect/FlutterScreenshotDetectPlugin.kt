@@ -1,4 +1,3 @@
-
 package com.ss.detect
 
 import android.app.Activity
@@ -15,9 +14,9 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
-import kotlin.math.log
 
-class FlutterScreenshotDetectPlugin: FlutterPlugin, EventChannel.StreamHandler, ActivityAware {
+class FlutterScreenshotDetectPlugin : FlutterPlugin, EventChannel.StreamHandler, ActivityAware {
+
     private var contentResolver: ContentResolver? = null
     private var eventSink: EventChannel.EventSink? = null
     private var screenshotObserver: ContentObserver? = null
@@ -33,14 +32,12 @@ class FlutterScreenshotDetectPlugin: FlutterPlugin, EventChannel.StreamHandler, 
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setStreamHandler(null)
-        contentResolver = null
-        screenshotObserver = null
-        unregisterScreenCaptureCallback()
+        cleanupResources()
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
-        registerScreenCaptureCallback()
+        registerScreenCaptureCallbackIfNeeded()
     }
 
     override fun onDetachedFromActivity() {
@@ -50,7 +47,7 @@ class FlutterScreenshotDetectPlugin: FlutterPlugin, EventChannel.StreamHandler, 
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
-        registerScreenCaptureCallback()
+        registerScreenCaptureCallbackIfNeeded()
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
@@ -58,19 +55,33 @@ class FlutterScreenshotDetectPlugin: FlutterPlugin, EventChannel.StreamHandler, 
         activity = null
     }
 
+    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+        eventSink = events
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            registerScreenCaptureCallback()
+        } else {
+            registerContentObserver()
+        }
+    }
+
+    override fun onCancel(arguments: Any?) {
+        cleanupResources()
+        eventSink = null
+    }
+
     private fun registerScreenCaptureCallback() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            Log.d("INFO","Android 14 detected")
             screenCaptureCallback = Activity.ScreenCaptureCallback {
-                eventSink?.success(mapOf(
-                    "method" to "screen_capture_callback",
-                    "timestamp" to System.currentTimeMillis()
-                ))
+                Log.d("INFO", "Android ${Build.VERSION.RELEASE_OR_CODENAME} detected")
+                eventSink?.success(
+                    mapOf(
+                        "method" to "screen_capture_callback",
+                        "timestamp" to System.currentTimeMillis()
+                    )
+                )
             }
-            Log.d("INFO","SS CAPTURED")
             activity?.registerScreenCaptureCallback(
-                activity!!.mainExecutor,
-                screenCaptureCallback!!
+                activity!!.mainExecutor, screenCaptureCallback!!
             )
         }
     }
@@ -82,43 +93,51 @@ class FlutterScreenshotDetectPlugin: FlutterPlugin, EventChannel.StreamHandler, 
         }
     }
 
-    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-        eventSink = events
-
-        // Set up content observer for older Android versions
+    private fun registerContentObserver() {
         screenshotObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean, uri: Uri?) {
                 super.onChange(selfChange, uri)
+                Log.d("INFO", "Android ${Build.VERSION.RELEASE_OR_CODENAME} detected")
                 uri?.let {
-                    Log.d("INFO","SS CAPTURED"+it.path)
                     if (isScreenshotPath(it.path)) {
-                        eventSink?.success(mapOf(
-                            "method" to "content_observer",
-                            "timestamp" to System.currentTimeMillis(),
-                            "path" to it.path
-                        ))
+                        eventSink?.success(
+                            mapOf(
+                                "method" to "content_observer",
+                                "timestamp" to System.currentTimeMillis(),
+                                "path" to it.path
+                            )
+                        )
                     }
                 }
             }
         }
-
         contentResolver?.registerContentObserver(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            true,
-            screenshotObserver!!
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshotObserver!!
         )
-        // Register screen capture callback for Android 14+
-        registerScreenCaptureCallback()
     }
 
-    override fun onCancel(arguments: Any?) {
-        contentResolver?.unregisterContentObserver(screenshotObserver!!)
-        unregisterScreenCaptureCallback()
-        eventSink = null
-        screenshotObserver = null
+    private fun cleanupResources() {
+        try {
+            contentResolver?.unregisterContentObserver(screenshotObserver!!)
+            unregisterScreenCaptureCallback()
+            screenshotObserver = null
+        } catch (_: Exception) {
+        }
     }
 
     private fun isScreenshotPath(path: String?): Boolean {
-        return path.toString().contains(MediaStore.Images.Media.EXTERNAL_CONTENT_URI.toString())
+        return path?.let {
+            it.contains("DCIM", ignoreCase = true) || it.contains(
+                "Screenshots", ignoreCase = true
+            ) || it.contains("external/images", ignoreCase = true)
+        } ?: false
+    }
+
+    private fun registerScreenCaptureCallbackIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            registerScreenCaptureCallback()
+        } else {
+            registerContentObserver()
+        }
     }
 }

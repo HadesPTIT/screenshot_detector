@@ -1,4 +1,3 @@
-// lib/screenshot_detector.dart
 import 'package:flutter/services.dart';
 
 class FlutterScreenshotDetect {
